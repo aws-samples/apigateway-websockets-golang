@@ -1,4 +1,4 @@
-# Amazon APIGateway WebSockets with Amazon ElastiCache for Redis
+# Amazon API Gateway WebSockets with Amazon ElastiCache for Redis
 
 This project contains a reference implementation for using AWS VPC, Amazon API Gateway WebSockets, AWS Lambda, and Amazon ElastiCache for Redis.
 
