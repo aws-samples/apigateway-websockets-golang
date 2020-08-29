@@ -1,6 +1,8 @@
 {
     "cSpell.words": [
         "CNAME",
+        "Datapoints",
+        "Hostnames",
         "SADD",
         "SMEMBERS",
         "SREM",

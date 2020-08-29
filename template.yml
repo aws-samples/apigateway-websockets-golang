@@ -33,26 +33,31 @@ Parameters:
     Type: String
     Default: 10.1.0.0/16
     Description: The IP range (CIDR notation) for this VPC
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(\\d|[1-2]\\d|3[0-2]))$"
 
   PrivateSubnet1CIDR:
     Type: String
     Default: 10.1.1.0/24
     Description: The IP range (CIDR notation) for the private subnet in the first AZ
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(\\d|[1-2]\\d|3[0-2]))$"
 
   PrivateSubnet2CIDR:
     Type: String
     Default: 10.1.2.0/24
     Description: The IP range (CIDR notation) for the private subnet in the second AZ
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(\\d|[1-2]\\d|3[0-2]))$"
 
   PublicSubnet1CIDR:
     Type: String
     Default: 10.1.3.0/24
     Description: The IP range (CIDR notation) for the public subnet in the first AZ
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(\\d|[1-2]\\d|3[0-2]))$"
 
   PublicSubnet2CIDR:
     Type: String
     Default: 10.1.4.0/24
     Description: The IP range (CIDR notation) for the public subnet in the second AZ
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(\\d|[1-2]\\d|3[0-2]))$"
 
   CacheNodeType:
     Type: String
@@ -528,6 +533,57 @@ Resources:
       Description: TO DO
       IntegrationType: AWS_PROXY
       IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PublishFunction.Arn}/invocations
+
+  CacheNodeCpuUtilizationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      Period: 900
+      Threshold: 90
+      Unit: Percent
+      Statistic: Average
+      EvaluationPeriods: 2
+      MetricName: CPUUtilization
+      Namespace: AWS/ElastiCache
+      ComparisonOperator: GreaterThanThreshold
+      AlarmName: Redis Cache Cluster CPU Utilization
+      AlarmDescription: Alarm if average percentage of Nodes CPU utilization goes over 90%
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Ref RedisReplicationGroup
+
+  CacheEvictionsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      Period: 60
+      Threshold: 0
+      Statistic: Sum
+      EvaluationPeriods: 3
+      MetricName: Evictions
+      Namespace: AWS/ElastiCache
+      TreatMissingData: notBreaching
+      ComparisonOperator: GreaterThanThreshold
+      AlarmName: Redis Cache Cluster Evictions
+      AlarmDescription: Alarm if cache is evicting non-expired items
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Ref RedisReplicationGroup
+
+  CacheSwapUsageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      Period: 300
+      Statistic: Maximum
+      Threshold: 50000000
+      DatapointsToAlarm: 5
+      EvaluationPeriods: 5
+      MetricName: SwapUsage
+      Namespace: AWS/ElastiCache
+      ComparisonOperator: GreaterThanThreshold
+      AlarmName: Redis Cache Cluster Swap Usage
+      AlarmDescription: Alarm if cache swap usage exceeds 50MB
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Ref RedisReplicationGroup
 
 Outputs:
   VPC:
