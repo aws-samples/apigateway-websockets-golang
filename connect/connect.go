@@ -42,7 +42,7 @@ func main() {
 // handler receives a synchronous invocation from API Gateway when a new WebSocket connection is created for the
 // application's API. The connection details are cached in the application's Redis cache which makes the connection
 // available to the other application components.
-func handler(ctx context.Context, req *events.APIGatewayWebsocketProxyRequest) (apigw.Response, error) {
+func handler(_ context.Context, req *events.APIGatewayWebsocketProxyRequest) (apigw.Response, error) {
 	defer func() {
 		_ = logger.Instance.Sync()
 	}()

@@ -42,7 +42,7 @@ func main() {
 // handler receives a synchronous invocation from API Gateway when a new connection has been disconnected from the
 // application's API. The connection details are removed in the application's Redis cache which cleans up the connection
 // details. This handler is not guaranteed to be called when the WebSocket connection is closed.
-func handler(ctx context.Context, req *events.APIGatewayWebsocketProxyRequest) (apigw.Response, error) {
+func handler(_ context.Context, req *events.APIGatewayWebsocketProxyRequest) (apigw.Response, error) {
 	defer func() {
 		_ = logger.Instance.Sync()
 	}()

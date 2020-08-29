@@ -244,6 +244,33 @@ Resources:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable2
 
+  PrivateHostedZone:
+    Type: "AWS::Route53::HostedZone"
+    Properties:
+      Name: "service.internal"
+      HostedZoneConfig:
+        Comment: Private Hosted Zone
+      VPCs:
+        - VPCId: !Ref VPC
+          VPCRegion: !Ref "AWS::Region"
+
+  CacheEndpointRecordSetGroup:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !Ref PrivateHostedZone
+      Comment: Record Set for the primary Redis endpoint
+      RecordSets:
+        - TTL: "900"
+          Type: CNAME
+          Name: "redis.service.internal"
+          ResourceRecords:
+            - !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+        - TTL: "900"
+          Type: SRV
+          Name: "_redis._tcp.service.internal"
+          ResourceRecords:
+            - !Sub "1 0 ${RedisReplicationGroup.PrimaryEndPoint.Port} redis.service.internal"
+
   NoIngressSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -312,10 +339,6 @@ Resources:
       MemorySize: 512
       CodeUri: connect/
       Handler: bin/handler
-      Environment:
-        Variables:
-          REDIS_PORT: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Port
-          REDIS_HOST: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
       VpcConfig:
         SubnetIds:
           - !Ref PrivateSubnet1
@@ -334,10 +357,6 @@ Resources:
       MemorySize: 512
       CodeUri: disconnect/
       Handler: bin/handler
-      Environment:
-        Variables:
-          REDIS_PORT: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Port
-          REDIS_HOST: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
       VpcConfig:
         SubnetIds:
           - !Ref PrivateSubnet1
@@ -356,10 +375,6 @@ Resources:
       MemorySize: 1024
       Handler: bin/handler
       CodeUri: publish/
-      Environment:
-        Variables:
-          REDIS_PORT: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Port
-          REDIS_HOST: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
       VpcConfig:
         SubnetIds:
           - !Ref PrivateSubnet1

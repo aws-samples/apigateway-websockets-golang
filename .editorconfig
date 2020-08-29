@@ -19,35 +19,15 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+root = true
 
-.PHONY: check clean test build deploy
+[*]
+charset = utf-8
+indent_size = 4
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
 
-test:
-	go test -v ./...
-
-clean:
-	$(MAKE) -C publish clean
-	$(MAKE) -C connect clean
-	$(MAKE) -C disconnect clean
-
-build: clean
-	@echo "building handlers for aws lambda"
-	$(MAKE) -C publish build
-	$(MAKE) -C connect build
-	$(MAKE) -C disconnect build
-
-deploy: check
-	@echo "deploying infrastructure and code"
-	sam package --output-template-file packaged.yml --s3-bucket "${bucket}"
-	sam deploy --no-fail-on-empty-changeset \
-		--stack-name "${stack}" \
-		--template-file packaged.yml \
-		--capabilities CAPABILITY_IAM
-
-check:
-ifndef bucket
-	$(error bucket was not provided)
-endif
-ifndef stack
-	$(error stack was not provided)
-endif
+[Makefile]
+indent_style = tab
