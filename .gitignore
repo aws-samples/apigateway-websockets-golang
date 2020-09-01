@@ -32,7 +32,8 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-# SAM generated CloudFormation template
+# SAM generated directories and files
+.aws-sam
 packaged.yml
 
 # AWS Lambda invoke response

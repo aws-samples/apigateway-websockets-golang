@@ -32,9 +32,19 @@ clean:
 
 build: clean
 	@echo "building handlers for aws lambda"
-	$(MAKE) -C publish build
+	sam build
+
+build-ConnectFunction:
+	@echo "building handler for aws lambda"
 	$(MAKE) -C connect build
+
+build-DisconnectFunction:
+	@echo "building handler for aws lambda"
 	$(MAKE) -C disconnect build
+
+build-PublishFunction:
+	@echo "building handler for aws lambda"
+	$(MAKE) -C publish build
 
 deploy: check
 	@echo "deploying infrastructure and code"

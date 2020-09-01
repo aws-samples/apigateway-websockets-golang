@@ -71,6 +71,21 @@ Parameters:
       - cache.t3.small
       - cache.t3.medium
 
+Globals:
+  Function:
+    CodeUri: .
+    Timeout: 5
+    Tracing: Active
+    MemorySize: 512
+    Runtime: provided.al2
+    Handler: my.bootstrap.file
+    VpcConfig:
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref NoIngressSecurityGroup
+
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -337,55 +352,26 @@ Resources:
 
   ConnectFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
     Properties:
-      Timeout: 15
-      Runtime: go1.x
-      Tracing: Active
-      MemorySize: 512
-      CodeUri: connect/
-      Handler: bin/handler
-      VpcConfig:
-        SubnetIds:
-          - !Ref PrivateSubnet1
-          - !Ref PrivateSubnet2
-        SecurityGroupIds:
-          - !Ref NoIngressSecurityGroup
       Policies:
         - VPCAccessPolicy: {}
 
   DisconnectFunction:
+    Metadata:
+      BuildMethod: makefile
     Type: AWS::Serverless::Function
     Properties:
-      Timeout: 15
-      Runtime: go1.x
-      Tracing: Active
-      MemorySize: 512
-      CodeUri: disconnect/
-      Handler: bin/handler
-      VpcConfig:
-        SubnetIds:
-          - !Ref PrivateSubnet1
-          - !Ref PrivateSubnet2
-        SecurityGroupIds:
-          - !Ref NoIngressSecurityGroup
       Policies:
         - VPCAccessPolicy: {}
 
   PublishFunction:
+    Metadata:
+      BuildMethod: makefile
     Type: AWS::Serverless::Function
     Properties:
-      Timeout: 30
-      Runtime: go1.x
-      Tracing: Active
-      MemorySize: 1024
-      Handler: bin/handler
-      CodeUri: publish/
-      VpcConfig:
-        SubnetIds:
-          - !Ref PrivateSubnet1
-          - !Ref PrivateSubnet2
-        SecurityGroupIds:
-          - !Ref NoIngressSecurityGroup
+      Timeout: 15
       Policies:
         - VPCAccessPolicy: {}
         - Statement:
