@@ -1,12 +1,15 @@
 {
     "cSpell.words": [
         "CNAME",
+        "CPUs",
         "Datapoints",
         "Hostnames",
         "SADD",
         "SMEMBERS",
         "SREM",
+        "aerr",
         "apigw",
+        "cerr",
         "servicelookup",
         "wscat"
     ]

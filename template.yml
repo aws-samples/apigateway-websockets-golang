@@ -372,6 +372,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 15
+      MemorySize: 2048
       Policies:
         - VPCAccessPolicy: {}
         - Statement:

@@ -24,6 +24,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"runtime"
+	"sync"
 	"time"
 
 	"com.aws-samples/apigateway.websockets.golang/lib/apigw"
@@ -32,6 +35,7 @@ import (
 	"com.aws-samples/apigateway.websockets.golang/lib/redis"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/awserr"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
 
 	"github.com/aws/aws-lambda-go/lambda"
@@ -39,6 +43,34 @@ import (
 	radix "github.com/mediocregopher/radix/v3"
 	"go.uber.org/zap"
 )
+
+// Stack is a simple thread-safe Pop only stack implementation which allows workers to pull work from the stack.
+type Stack struct {
+	mu       sync.Mutex
+	elements []string
+}
+
+// Pop pops the next item from the stack and returns it or returns an error if the stack is empty.
+func (s *Stack) Pop() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	c := len(s.elements)
+	if c == 0 {
+		return "", errors.New("no more elements")
+	}
+
+	v := s.elements[c-1]
+	s.elements = s.elements[:c-1]
+	return v, nil
+}
+
+// Len returns the length of the stack.
+func (s *Stack) Len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.elements)
+}
 
 // cfg is the base or parent AWS configuration for this lambda.
 var cfg aws.Config
@@ -107,8 +139,8 @@ func handler(ctx context.Context, req *events.APIGatewayWebsocketProxyRequest) (
 		return apigw.InternalServerErrorResponse(), err
 	}
 
-	var connections []string
-	err = redis.Client.Do(radix.Cmd(&connections, "SMEMBERS", "connections"))
+	stack := new(Stack)
+	err = redis.Client.Do(radix.Cmd(&(stack.elements), "SMEMBERS", "connections"))
 	if err != nil {
 		logger.Instance.Error("failed to read connections from cache",
 			zap.String("requestId", req.RequestContext.RequestID),
@@ -119,28 +151,113 @@ func handler(ctx context.Context, req *events.APIGatewayWebsocketProxyRequest) (
 	}
 
 	logger.Instance.Info("websocket connections read from cache",
-		zap.Int("connections", len(connections)),
+		zap.Int("connections", stack.Len()),
 		zap.String("requestId", req.RequestContext.RequestID),
 		zap.String("connectionId", req.RequestContext.ConnectionID))
 
-	for _, connection := range connections {
-		if connection == req.RequestContext.ConnectionID && !input.Echo {
-			continue
-		}
+	// Calculate how many go routines should be created to handle the work. Taking the number of logical CPUs times a
+	// factor of 4 enables processing outgoing messages concurrently while limiting the amount of context switching.
+	var wg sync.WaitGroup
+	for i := 0; i < runtime.NumCPU()*4; i++ {
+		wg.Add(1)
 
-		_, err := apiClient.PostToConnectionRequest(&apigatewaymanagementapi.PostToConnectionInput{
-			Data:         data,
-			ConnectionId: aws.String(connection),
-		}).Send(ctx)
+		// Run the go routine until the context is canceled or there is no more work to process.
+		go func(sender string, echo bool) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					// Pull the next connection id from the stack. If the stack is empty, a non-nil error is returned
+					// and the go routine exits cleanly. Otherwise, a nil error and the next connection id is returned.
+					id, err := stack.Pop()
+					if err != nil {
+						return
+					}
 
-		if err != nil {
-			logger.Instance.Error("failed to publish to connection",
-				zap.String("receiver", connection),
-				zap.String("requestId", req.RequestContext.RequestID),
-				zap.String("sender", req.RequestContext.ConnectionID),
-				zap.Error(err))
+					// Do not send data to the connection if the connection represents the sender and the message was
+					// configured to not echo back the message.
+					if id == sender && !echo {
+						continue
+					}
+
+					// Publish the data to the connected client via Amazon API Gateway's Management API. If publishing
+					// the data results in an error, the error is passed to a convenience function which attempts to
+					// resolve the issue which caused the error. The convenience function may return the same error if
+					// it can not be handled or may return a different error if attempting the resolution results in an
+					// error. Regardless, if an error is returned the only course of action is to log it.
+					err = handleError(publish(ctx, id, data), id)
+					if err != nil {
+						logger.Instance.Error("failed to publish to connection",
+							zap.String("receiver", id),
+							zap.String("requestId", req.RequestContext.RequestID),
+							zap.String("sender", req.RequestContext.ConnectionID),
+							zap.Error(err))
+					}
+				}
+			}
+		}(req.RequestContext.ConnectionID, input.Echo)
+	}
+
+	wg.Wait()
+	return apigw.OkResponse(), nil
+}
+
+// publish publishes the provided data to the provided Amazon API Gateway connection ID. A common failure scenario which
+// results in an error is if the connection ID is no longer valid. This can occur when a client disconnected from the
+// Amazon API Gateway endpoint but the disconnect AWS Lambda was not invoked as it is not guaranteed to be invoked when
+// clients disconnect.
+func publish(ctx context.Context, id string, data []byte) error {
+	_, err := apiClient.PostToConnectionRequest(&apigatewaymanagementapi.PostToConnectionInput{
+		Data:         data,
+		ConnectionId: aws.String(id),
+	}).Send(ctx)
+
+	return err
+}
+
+// handleError is a convenience function for taking action for a given error value. The function handles nil errors as a
+// convenience to the caller. If a nil error is provided, the error is immediately returned. The function may return an
+// error from the handling action, such as deleting the id from the cache, if that action results in an error.
+func handleError(err error, id string) error {
+	if err == nil {
+		return err
+	}
+
+	// Casting to the awserr.Error type will allow you to inspect the error code returned by the service in code. The
+	// error code can be used to switch on context specific functionality.
+	if aerr, ok := err.(awserr.Error); ok {
+		switch aerr.Code() {
+		case aws.ErrCodeSerialization:
+			logger.Instance.Info("delete stale connection details from cache", zap.String("connectionId", id))
+			return deleteConnectionId(id)
+		case apigatewaymanagementapi.ErrCodeGoneException:
+			logger.Instance.Info("delete stale connection details from cache", zap.String("connectionId", id))
+			return deleteConnectionId(id)
+		default:
+			return err
 		}
 	}
 
-	return apigw.OkResponse(), nil
+	return err
+}
+
+// deleteConnectionId deletes the connection id from the REDIS cache. The function logs both error and success cases.
+func deleteConnectionId(id string) error {
+	var result string
+	err := redis.Client.Do(radix.Cmd(&result, "SREM", "connections", id))
+	if err != nil {
+		logger.Instance.Error("failed to delete connection details from cache",
+			zap.String("connectionId", id),
+			zap.Error(err))
+
+		return err
+	}
+
+	logger.Instance.Info("websocket connection deleted from cache",
+		zap.String("result", result),
+		zap.String("connectionId", id))
+
+	return err
 }
