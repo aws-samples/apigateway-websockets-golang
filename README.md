@@ -42,6 +42,8 @@ AWS_PROFILE={profile} AWS_DEFAULT_REGION={region} make bucket={bucket} stack={st
 
 ## Using wscat for Testing
 
+<https://www.npmjs.com/package/wscat>
+
 Query the deployed WebSocket endpoint by running the following command:
 
 ```bash
